@@ -5,8 +5,16 @@
       google.charts.load('current', {'packages':['corechart']});
       google.charts.setOnLoadCallback(drawChart);
 
+      function track()
+      {
+        this.cur_bracket = 0; 
+        this.prev_bracket = 0; 
+        this.changed = false; 
+        this.prev_tax = 0.0;
+      }
+
       function drawChart() {
-        var MAX_INCOME = 500000;
+        var MAX_INCOME = 1000000;
         var INCOME_RES = 1000;
         var INCOMES = new Array(MAX_INCOME/INCOME_RES + 1);
         for(var i = 0; i < INCOMES.length; i++)
@@ -19,7 +27,7 @@
         FED_TAX_FILING_TYPE_MSEPARATE = 2;
         FED_TAX_FILING_TYPE_HOF = 3;
         FED_TAX_FILING_TYPE_NUM = 4;
-        var FED_TAX_RATES = [10.0, 15.0, 25.0, 28.0, 33.0, 35.0, 39.6]
+        var FED_TAX_RATES = [0.100, 0.150, 0.250, 0.280, 0.330, 0.350, 0.396]
         var FED_TAX_BRACKETS = 
         [
           [0 , 9276  , 37651 , 91151  , 190151 , 413351 , 415051] ,
@@ -28,50 +36,56 @@
           [0 , 13251 , 50401 , 130151 , 210801 , 413351 , 441001] ,
         ];
 
-        var FED_TAX_AMT_SINGLE = new Array(INCOMES.length);
+        var FED_TAX_AMTS = [];
+        
+        var tracks = []
+        for(var i = 0; i < FED_TAX_FILING_TYPE_NUM; i++)
+        {
+          tracks.push(new track())
+          FED_TAX_AMTS.push([])
+        }
 
-        cur_bracket = 0;
-        prev_bracket = 0;
-        prev_tax = 0.0;
         for(var i = 0; i < INCOMES.length; i++)
         {
-          changed = false;
-          tax_this_res = 0.0;
           income = INCOMES[i];
-          prev_rate = FED_TAX_RATES[prev_bracket];
-          cur_rate = FED_TAX_RATES[cur_bracket];
-          if((cur_bracket < (FED_TAX_RATES.length-1)) && 
-            (income > FED_TAX_BRACKETS[FED_TAX_FILING_TYPE_SINGLE][cur_bracket+1]))
+          for(var type = 0; type < FED_TAX_FILING_TYPE_NUM; type++)
           {
-            cur_bracket += 1
-            prev_bracket += 1
-            changed = true
-          }
+            tax_this_res = 0.0;
+            tracks[type].changed = false;
+            if((tracks[type].cur_bracket < (FED_TAX_RATES.length-1)) && 
+              (income > FED_TAX_BRACKETS[type][tracks[type].cur_bracket+1]))
+            {
+              tracks[type].cur_bracket += 1
+              tracks[type].prev_bracket += 1
+              tracks[type].changed = true
+            }
 
-          if(changed)
-          {
-            tax_this_res = (FED_TAX_BRACKETS[FED_TAX_FILING_TYPE_SINGLE][cur_bracket] % INCOME_RES)*prev_rate /100.0+
-                           (INCOME_RES - (FED_TAX_BRACKETS[FED_TAX_FILING_TYPE_SINGLE][cur_bracket] % INCOME_RES))*cur_rate/100.0;
-          }
-          else
-          {
-            tax_this_res = INCOME_RES * cur_rate/100.0;
-          }
+            if(tracks[type].changed)
+            {
+              tax_this_res = (FED_TAX_BRACKETS[FED_TAX_FILING_TYPE_SINGLE][tracks[type].cur_bracket] % INCOME_RES)*FED_TAX_RATES[tracks[type].prev_bracket] +
+              (INCOME_RES - (FED_TAX_BRACKETS[FED_TAX_FILING_TYPE_SINGLE][tracks[type].cur_bracket] % INCOME_RES))*FED_TAX_RATES[tracks[type].cur_bracket];
+            }
+            else
+            {
+              tax_this_res = INCOME_RES * FED_TAX_RATES[tracks[type].prev_bracket];
+            }
 
-          FED_TAX_AMT_SINGLE[i] = prev_tax + tax_this_res;
-          prev_tax = FED_TAX_AMT_SINGLE[i]
-          // console.log(prev_tax)
-
+            FED_TAX_AMTS[type].push(tracks[type].prev_tax + tax_this_res);
+            tracks[type].prev_tax = FED_TAX_AMTS[type][i];
+          }
         }
 
         var data = new google.visualization.DataTable();
         data.addColumn('number', 'Income');
-        data.addColumn('number', 'Tax');
+        data.addColumn('number', 'Federal Single');
+        data.addColumn('number', 'Federal Married Joint');
+        data.addColumn('number', 'Federal Married Separate');
+        data.addColumn('number', 'Federal Head of Family');
         var options = {
           title: 'Taxes',
           curveType: 'function',
           legend: { position: 'bottom' },          
-          chartArea: {width: '80%', height: '80%'},
+          chartArea: {width: '60%', height: '60%'},
           height: 768,
           width: 1536,        
         };
@@ -79,7 +93,11 @@
         var final_data = [];
         for(var i = 0; i < INCOMES.length; i ++)
         {
-          final_data.push([INCOMES[i], FED_TAX_AMT_SINGLE[i]]);
+          final_data.push([INCOMES[i], 
+            FED_TAX_AMTS[FED_TAX_FILING_TYPE_SINGLE][i], 
+            FED_TAX_AMTS[FED_TAX_FILING_TYPE_MJOINT][i], 
+            FED_TAX_AMTS[FED_TAX_FILING_TYPE_MSEPARATE][i], 
+            FED_TAX_AMTS[FED_TAX_FILING_TYPE_HOF][i],]);
         }
 
         console.log(final_data)
